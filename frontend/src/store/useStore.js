@@ -1304,6 +1304,9 @@ export const useStore = create((set, get) => {
     }
     let { state, rev } = res
     reached()
+    // A v1 document answered as it is can only come from an API not yet updated (this one's gate
+    // answers migration-required): taken over DEF it would read as v2, and be pushed back so.
+    if (isLegacyProfile(state)) { if (!owedMark) releaseAdopt(); await get().openMigration(); return { adopted: false, added: false } }
     let asked = false
     const askAbout = async extras => {
       if (!(extras.workouts || extras.bodyweight || extras.customEx || extras.routines || extras.setup) || typeof ask !== 'function') return false
@@ -1940,6 +1943,8 @@ export const useStore = create((set, get) => {
           lastCheck = Date.now()
           reached()
           const { state, rev } = res
+          // As in runAdopt: a v1 document is an API still to be updated, never a copy to adopt.
+          if (isLegacyProfile(state)) { await get().openMigration(); return }
           const S = get().S
           const { base, owed } = metaOf()
           // Owed to the server: a push that failed, or a change made while boot was still pulling.

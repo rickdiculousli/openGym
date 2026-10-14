@@ -113,7 +113,7 @@ describe('saved workout state sync and restore', () => {
   })
 
   it('restores a remote state over defaults when the local profile is empty', async () => {
-    const remote = { _ts: 30, routines: [routine('remote')], workouts: [] }
+    const remote = { engineSchemaVersion: 2, _ts: 30, routines: [routine('remote')], workouts: [] }   // a v2 server; a v1 answer is never adopted
     api.mockResolvedValue({ state: remote })
 
     await useStore.getState().pullState()
