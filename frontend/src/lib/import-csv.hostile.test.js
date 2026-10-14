@@ -227,7 +227,7 @@ describe('mergeImport adds and never overwrites', () => {
         expect(x.performance.sets.length).toBeGreaterThan(0)
       }
     }
-    expect(S.workouts[2].exposures[0].performance.sets[0].observations).toEqual([{ metric: 'duration', unit: 'min', value: 30 }, { metric: 'speed', unit: 'kmh', value: 10 }])
+    expect(S.workouts[2].exposures[0].performance.sets[0].observations).toEqual([{ metric: 'duration', unit: 's', value: 1800 }, { metric: 'speed', unit: 'kmh', value: 10 }])   // seconds, as every reader takes a duration
   })
 
   it('weigh-ins: existing days win and the list stays sorted', () => {

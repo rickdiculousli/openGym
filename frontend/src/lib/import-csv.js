@@ -785,16 +785,19 @@ export function parseImport(text, opts) {
 function performanceRowOf(row, unit) {
   const observations = []
   if (row.r != null) observations.push({ metric: 'repetitions', unit: 'reps', value: row.r })
-  if (row.min != null) observations.push({ metric: 'duration', unit: 'min', value: row.min })
+  // A duration is seconds to every reader (legacySet, the migration, session-ui-adapter): a hold's
+  // `sec` as it is, cardio's `min` times 60; and the effort sits on the row where legacySet reads it.
+  if (row.sec != null) observations.push({ metric: 'duration', unit: 's', value: row.sec })
+  else if (row.min != null) observations.push({ metric: 'duration', unit: 's', value: row.min * 60 })
   if (row.speed != null) observations.push({ metric: 'speed', unit: 'kmh', value: row.speed })
   const resistance = row.w > 0 ? { kind: 'external-load', value: row.w, unit } : { kind: row.min != null ? 'none' : 'bodyweight' }
-  const effort = row.rir != null ? { kind: 'rir', value: row.rir } : row.rpe != null ? { kind: 'rpe', value: row.rpe } : null
   return {
     role: isWarmupRow(row) ? 'warmup' : 'work',
     prescribed: false,
     status: row.done ? 'completed' : observations.length ? 'partial' : 'skipped',
     observations, resistance, segments: [],
-    ...(effort ? { effort } : {})
+    ...(row.rir != null ? { rir: row.rir } : {}),
+    ...(row.rpe != null ? { rpeEntered: row.rpe } : {})
   }
 }
 
@@ -829,7 +832,8 @@ export function mergeImport(S, parsed) {
       exposureId: 'ie' + uid(),
       exerciseId: e.id,
       exerciseNameSnapshot: EXIDX[e.id]?.n || e.id,
-      mode: modeOf({ id: e.id, ...(e.sets?.some(s => s.sec != null && s.r == null) ? { mode: 'time' } : {}) }),
+      // v1 rows say how they were logged: { min, speed } is cardio, { sec } without reps a hold.
+      mode: modeOf({ id: e.id, ...(e.sets?.some(s => s.min != null) ? { mode: 'cardio' } : e.sets?.some(s => s.sec != null && s.r == null) ? { mode: 'time' } : {}) }),
       trackId: 'import:' + e.id,
       excludedFromProgression: true,
       ...(e.sg ? { sg: e.sg } : {}),

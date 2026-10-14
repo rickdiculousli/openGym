@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { parseWorkoutCSV, mergeImport } from './import-csv.js'
+import { legacyEntriesOf } from './prescription/index.js'
 
 // Rows from a real Strong export (QA sample). Strong writes the workout's length in Duration
 // ("1h 5m", "52m") on every row and a set's own time in Seconds; the session note is
@@ -130,5 +131,20 @@ describe('two sessions on one day', () => {
     expect(parsed.source).toBe('FitNotes')
     expect(parsed.workouts).toHaveLength(1)
     expect(parsed.workouts[0].entries).toHaveLength(2)
+  })
+})
+
+// What the merge writes is read back by legacyEntriesOf everywhere (history, Stats, the MCP tools,
+// "Save as routine"), which takes a duration observation in seconds and the effort on the row.
+describe('merged into a canonical profile', () => {
+  it('reads back every imported set as it was parsed: the hold in seconds, cardio in minutes, the RPE', () => {
+    const parsed = parseWorkoutCSV(STRONG, { unit: 'kg' })
+    const S = { workouts: [], customEx: [], exWeights: {}, bodyweight: [] }
+    expect(mergeImport(S, parsed)).toEqual({ added: 2, skipped: 0 })
+    const back = S.workouts.map(w => legacyEntriesOf(w).map(e => e.sets))
+    expect(back).toEqual(parsed.workouts.map(w => w.entries.map(e => e.sets)))
+    expect(back[0].flat().some(s => s.rpe === 8)).toBe(true)
+    expect(back[0].flat().some(s => s.sec === 60)).toBe(true)
+    expect(back[1].flat()).toContainEqual({ min: 20, speed: 9, done: true })
   })
 })
