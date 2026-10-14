@@ -637,8 +637,13 @@ export const useStore = create((set, get) => {
     const tag = readWidOwner()
     return tag === null || tag === (seenOwner || '')
   }
+  // The saved copy is stored packed (persist, lib/state-codec.js) and read back canonical, like
+  // every other reader of KEY; a v1 copy waits for the migration screen and is nothing to join.
   const readSaved = () => {
-    try { const raw = localStorage.getItem(KEY); return raw ? Object.assign(clone(DEF), JSON.parse(raw)) : null } catch { return null }
+    try {
+      const stored = parseStored(localStorage.getItem(KEY))
+      return stored && !stored.status.required ? Object.assign(clone(DEF), stored.parsed) : null
+    } catch { return null }
   }
   // Another tab's copy joined into `mine`. The running workout (`A`) is its own key, shared by the tabs as it stands.
   const joinTabs = (mine, theirs) => Object.assign(clone(DEF), mergeStates(mine, theirs))

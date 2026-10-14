@@ -7,6 +7,10 @@
    wiped what the other tab owed. (QA 2026-10-06, also in v1.3.9.) Each "tab" is a fresh import of
    the store sharing one localStorage, as in the other tab tests. */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { migrateProfileV1ToV2, validateCanonicalProfile } from '../../../api/migration/profile-migration.js'
+import { LIB_BY_ID } from '../../../api/coach/core/library.js'
+import { parseState } from '../lib/state-codec.js'
+import { unpackProfile } from '../../../api/migration/profile-pack.js'
 
 const h = vi.hoisted(() => ({ api: null }))
 vi.mock('../lib/api.js', () => ({ setAccessHeaders: vi.fn(), api: (...a) => h.api(...a), setRemoteAuth: () => {} }))
@@ -218,5 +222,60 @@ describe('two tabs of one browser keep each other\'s changes', () => {
     B.getState().update(s => { s.workouts.push(w('g2', '2026-09-02')) })   // A not told yet
     A.getState().setUser({ id: OWNER, name: 'Tess' }, { adopt: true })
     expect(JSON.parse(localStorage.getItem('gym_adopt')).pre.workouts.sort()).toEqual(['g1', 'g2'])
+  })
+})
+
+/* The saved copy is written packed (lib/state-codec.js) and read back canonical. The fixtures above
+   have no prescription and no exposure, which is exactly what packing rewrites, so a join that
+   read the packed form as if it were canonical passed every test above and corrupted a real
+   profile: renamed prescriptions, exposures with short keys, a document the server refuses. */
+describe('two tabs of one browser join the canonical profile, never its packed form', () => {
+  const V1 = {
+    unit: 'kg', _ts: 100,
+    routines: [{ id: 'r1', name: 'Push', ex: [{ id: '0025', sets: 3, reps: 5, weight: 60, prog: 'linear', warmupSets: 2 }] }],
+    workouts: [{ id: 'w1', d: '2026-01-05', start: 1, end: 2, routineIds: ['r1'], entries: [{ id: '0025', rid: 'r1', target: { sets: 3, reps: 5, weight: 60 }, sets: [{ r: 5, w: 60, done: true }] }] }]
+  }
+  const canonical = () => migrateProfileV1ToV2(clone(V1), LIB_BY_ID).profile
+  const prescriptionIds = st => Object.keys(st.prescriptions || {}).sort()
+
+  it('the other tab takes a saved change with every workout, exposure and prescription intact', async () => {
+    const P = canonical()
+    expect(prescriptionIds(P).length).toBeGreaterThan(0)
+    expect(P.workouts[0].exposures[0].exerciseId).toBe('0025')
+    const srv = server({ ...P, _rev: 1 })
+    savedCopy(srv.doc, 1)
+    const A = await openTab()
+    const B = await openTab()
+    B.getState().update(s => { s.restSec = 45 }, false)   // persist writes the copy packed
+    announce()
+    const S = A.getState().S
+    expect(validateCanonicalProfile(S)).toEqual({ ok: true, errors: [] })
+    expect(S.restSec).toBe(45)
+    expect(ids(S)).toEqual(['w1'])
+    expect(S.workouts[0].exposures[0].exerciseId).toBe('0025')
+    expect(prescriptionIds(S)).toEqual(prescriptionIds(P))
+    expect(S.packed).toBeUndefined()
+    // And what A saves next is a copy the server accepts, not the join of a packed one.
+    A.getState().update(s => { s.restSec = 50 }, false)
+    const stored = parseState(localStorage.getItem('gym_state_v1'))
+    expect(validateCanonicalProfile(stored)).toEqual({ ok: true, errors: [] })
+    expect(prescriptionIds(stored)).toEqual(prescriptionIds(P))
+  })
+
+  it('a workout finished in one tab reaches the other tab, and the server, in its canonical shape', async () => {
+    const P = canonical()
+    const srv = server({ ...P, workouts: [], prescriptions: {}, _rev: 1 })
+    savedCopy(srv.doc, 1)
+    const A = await openTab()
+    const B = await openTab()
+    B.getState().update(s => { s.workouts.push(clone(P.workouts[0])); s.prescriptions = clone(P.prescriptions) }, false)
+    announce()
+    expect(validateCanonicalProfile(A.getState().S)).toEqual({ ok: true, errors: [] })
+    expect(prescriptionIds(A.getState().S)).toEqual(prescriptionIds(P))
+    await A.getState().pushState()
+    const pushed = unpackProfile(srv.doc)   // the wire form is packed; the server stores and answers canonical
+    expect(validateCanonicalProfile(pushed)).toEqual({ ok: true, errors: [] })
+    expect(ids(pushed)).toEqual(['w1'])
+    expect(pushed.workouts[0].exposures[0].exerciseId).toBe('0025')
   })
 })
