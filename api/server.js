@@ -36,6 +36,7 @@ import { stampPut } from './sync-stamps.js';
 import { atomicWrite as durableWrite } from './durable.js';
 import { excusedOn, nudgeFor, nudgeWindowOpen, toneOf } from './nudge.js';
 import { isLegacyProfile, migrateProfileV1ToV2, migrationStatus, validateCanonicalProfile } from './migration/profile-migration.js';
+import { ENGINE_SCHEMA_HEADER } from './migration/profile-version.js';
 import { MAX_SYNC_BODY, assertSyncSize } from './migration/profile-size.js';
 import { packProfile, unpackProfile } from './migration/profile-pack.js';
 import { LIB_BY_ID } from './coach/core/library.js';
@@ -2745,7 +2746,9 @@ const server = http.createServer(async (req, res) => {
       'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
       // The CF-Access-* pair: a phone's Cloudflare Access service token (frontend lib/cf-access.js),
       // for an Access application that passes OPTIONS through to the origin.
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization, CF-Access-Client-Id, CF-Access-Client-Secret',
+      // And the engine schema the client announces on every request (frontend lib/api.js): left
+      // out, the WebView fails every preflighted request before the server sees it (#312 review).
+      'Access-Control-Allow-Headers': `Content-Type, Authorization, CF-Access-Client-Id, CF-Access-Client-Secret, ${ENGINE_SCHEMA_HEADER}`,
       'Access-Control-Max-Age': '86400',
       ...(pna ? { 'Access-Control-Allow-Private-Network': 'true' } : {})
     });
