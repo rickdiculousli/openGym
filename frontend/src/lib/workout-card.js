@@ -9,6 +9,7 @@
 import { sessionSections, workoutVolume, workoutDuration, workoutDay, doneUnits } from './history.js'
 import { EXIDX } from './exercises.js'
 import { isWarmupRow } from './workout-model.js'
+import { legacyEntriesOf } from './prescription/index.js'
 import { MUSCLES, INERT, levelsOf, loadOfWorkouts } from './muscles.js'
 import { fmtDate, fmtDur, fmtNum, fmtVol, capWords } from './format.js'
 import { t, exerciseNameClass } from './i18n-core.js'
@@ -31,8 +32,8 @@ const MAP_MAX_HEIGHT = 560
  * summary's muscle map for this one session (levelsOf over loadOfWorkouts), null when no set
  * reached a muscle the map can show — a card of only cardio has nothing to shade.
  */
-export function workoutCardModel(w, { unit, nameOf }) {
-  const entries = w.entries || []
+export function workoutCardModel(w, { unit, nameOf, prescriptions }) {
+  const entries = legacyEntriesOf(w, prescriptions)   // a migrated workout has exposures, not entries
   const sets = entries.reduce((n, e) => n + (e.sets || []).reduce((m, s) => m + (isWarmupRow(s) ? 0 : doneUnits(s)), 0), 0)
   // New bests in the order the sheet lists the exercises, each named once — a combined session
   // can hold the same lift twice.
